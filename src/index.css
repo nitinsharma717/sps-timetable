@@ -13,3 +13,40 @@
     scrollbar-width: thin;
   }
 }
+
+@media print {
+  /* Hide everything that's not the timetable */
+  aside,
+  .no-print {
+    display: none !important;
+  }
+
+  /* Remove scroll constraints so the full grid prints */
+  body, html, #root, .flex, main {
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  /* Full width — no sidebar gap */
+  main {
+    width: 100% !important;
+  }
+
+  /* Keep background colours when printing */
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Force table to fit the page width */
+  table {
+    width: 100% !important;
+    font-size: 10px !important;
+  }
+
+  /* Page setup */
+  @page {
+    size: A4 landscape;
+    margin: 12mm;
+  }
+}

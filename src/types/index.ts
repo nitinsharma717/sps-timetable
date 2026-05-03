@@ -92,13 +92,19 @@ export interface TimetableEntry {
 
 export interface ConflictInfo {
   id: string;
-  type: 'faculty' | 'room';
-  severity: 'error';
+  /**
+   * 'room'     – theory classroom double-booked (hard error)
+   * 'lab'      – faculty supervising two practicals/sessions at once (hard error)
+   * 'schedule' – rule violation: late slot, consecutive hours, free-day, etc. (warning)
+   */
+  type: 'room' | 'lab' | 'schedule';
+  severity: 'error' | 'warning';
   message: string;
   affectedEntryIds: string[];
+  roomNumber?: string;
   facultyName?: string;
-  day: Day;
-  startTime: TimeSlot;
+  day?: Day;          // optional — some warnings span the whole course
+  startTime?: TimeSlot;
 }
 
 export type Page = 'dashboard' | 'timetable' | 'faculty' | 'conflicts' | 'rooms';

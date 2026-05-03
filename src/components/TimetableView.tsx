@@ -4,7 +4,7 @@ import { DAYS, TIME_SLOTS, TIME_LABELS } from '../types';
 import { getConflictEntryIds } from '../utils/conflicts';
 import EntryModal from './EntryModal';
 import type { TimetableEntry, Day, TimeSlot } from '../types';
-import { AlertTriangle, Plus, Trash2, Pencil, ChevronLeft, ChevronRight } from 'lucide-react';
+import { AlertTriangle, Plus, Trash2, Pencil, ChevronLeft, ChevronRight, Printer } from 'lucide-react';
 
 interface Props {
   state: AppState;
@@ -108,8 +108,14 @@ export default function TimetableView({ state, dispatch, conflicts, facultyMap }
               </span>
             )}
             <button
+              onClick={() => globalThis.print()}
+              className="no-print flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+            >
+              <Printer size={16} /> Print
+            </button>
+            <button
               onClick={() => { setEditingEntry(null); setPrefillDay(null); setPrefillTime(null); setModalOpen(true); }}
-              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+              className="no-print flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
             >
               <Plus size={16} /> Add Entry
             </button>

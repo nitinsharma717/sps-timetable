@@ -79,8 +79,8 @@ export default function App() {
   }, [state.faculty]);
 
   const conflicts = useMemo(
-    () => detectConflicts(state.entries, facultyMap),
-    [state.entries, facultyMap]
+    () => detectConflicts(state.entries, state.courses, facultyMap),
+    [state.entries, state.courses, facultyMap]
   );
 
   const nav = (page: Page) => dispatch({ type: 'SET_PAGE', payload: page });
