@@ -1,7 +1,8 @@
-import { useReducer, useEffect, useMemo, useState } from 'react';
+import { useReducer, useEffect, useMemo, useState, useCallback } from 'react';
 import type { AppState, AppAction, CourseId, Page } from './types';
-import { INITIAL_FACULTY, INITIAL_COURSES, INITIAL_SUBJECTS, INITIAL_ROOMS } from './data/initialData';
+import { INITIAL_COURSES, INITIAL_SUBJECTS, INITIAL_ROOMS } from './data/initialData';
 import { detectConflicts } from './utils/conflicts';
+import * as db from './lib/db';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import TimetableView from './components/TimetableView';
@@ -9,11 +10,9 @@ import FacultyPage from './components/FacultyPage';
 import ConflictsPanel from './components/ConflictsPanel';
 import RoomsPage from './components/RoomsPage';
 
-const STORAGE_KEY = 'sps-timetable-v1';
-
 const initialState: AppState = {
   entries: [],
-  faculty: INITIAL_FACULTY,
+  faculty: [],
   subjects: INITIAL_SUBJECTS,
   courses: INITIAL_COURSES,
   rooms: INITIAL_ROOMS,
@@ -49,28 +48,36 @@ function reducer(state: AppState, action: AppAction): AppState {
 export default function App() {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [dbError, setDbError] = useState<string | null>(null);
 
-  // Load from localStorage on mount
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        dispatch({ type: 'LOAD_STATE', payload: parsed });
+    async function load() {
+      try {
+        const [entries, faculty] = await Promise.all([db.getEntries(), db.getFaculty()]);
+        dispatch({ type: 'LOAD_STATE', payload: { entries, faculty } });
+      } catch (err) {
+        setDbError('Could not connect to the database. Check your Supabase credentials.');
+        console.error(err);
+      } finally {
+        setLoading(false);
       }
-    } catch {
-      /* ignore */
     }
+    void load();
   }, []);
 
-  // Save to localStorage on change
-  useEffect(() => {
-    const toSave = {
-      entries: state.entries,
-      faculty: state.faculty,
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
-  }, [state.entries, state.faculty]);
+  // Optimistic local update + fire-and-forget to Supabase
+  const syncedDispatch = useCallback((action: AppAction): void => {
+    dispatch(action);
+    switch (action.type) {
+      case 'ADD_ENTRY':    void db.addEntry(action.payload);    break;
+      case 'UPDATE_ENTRY': void db.updateEntry(action.payload); break;
+      case 'DELETE_ENTRY': void db.deleteEntry(action.payload); break;
+      case 'ADD_FACULTY':    void db.addFaculty(action.payload);    break;
+      case 'UPDATE_FACULTY': void db.updateFaculty(action.payload); break;
+      case 'DELETE_FACULTY': void db.deleteFaculty(action.payload); break;
+    }
+  }, []);
 
   const facultyMap = useMemo(() => {
     const m = new Map<string, string>();
@@ -88,6 +95,29 @@ export default function App() {
     dispatch({ type: 'SET_SELECTED_COURSE', payload: id });
     dispatch({ type: 'SET_PAGE', payload: 'timetable' });
   };
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-gray-500 text-sm">Loading timetable…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (dbError) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-50">
+        <div className="text-center max-w-md px-6">
+          <p className="text-red-600 font-semibold text-lg mb-2">Database connection failed</p>
+          <p className="text-gray-500 text-sm">{dbError}</p>
+          <p className="text-gray-400 text-xs mt-4">Make sure <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> are set in your <code>.env</code> file.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-100">
@@ -115,7 +145,7 @@ export default function App() {
         {state.currentPage === 'timetable' && (
           <TimetableView
             state={state}
-            dispatch={dispatch}
+            dispatch={syncedDispatch}
             conflicts={conflicts}
             facultyMap={facultyMap}
           />
@@ -123,7 +153,7 @@ export default function App() {
         {state.currentPage === 'faculty' && (
           <FacultyPage
             faculty={state.faculty}
-            dispatch={dispatch}
+            dispatch={syncedDispatch}
           />
         )}
         {state.currentPage === 'conflicts' && (
