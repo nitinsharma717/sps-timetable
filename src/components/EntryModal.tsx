@@ -1,18 +1,29 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { X } from 'lucide-react';
 import type { TimetableEntry, Course, Subject, Faculty, CourseId, Day, TimeSlot, BatchLabel } from '../types';
-import { DAYS, TIME_SLOTS, TIME_LABELS } from '../types';
+import { DAYS, TIME_SLOTS, SLOT_TO_HOUR } from '../types';
+
+function hourLabel(h: number): string {
+  return h <= 12 ? `${h}:00` : `${h - 12}:00`;
+}
+
+function slotLabel(slot: TimeSlot, duration: number): string {
+  const start = SLOT_TO_HOUR[slot];
+  return `${hourLabel(start)}–${hourLabel(start + duration)}`;
+}
+
+type Duration = 1 | 2 | 3;
 
 interface Props {
-  entry: TimetableEntry | null;
-  courseId: CourseId;
-  courses: Course[];
-  subjects: Subject[];
-  faculty: Faculty[];
-  prefillDay: Day | null;
-  prefillTime: TimeSlot | null;
-  onSave: (entry: TimetableEntry) => void;
-  onClose: () => void;
+  readonly entry: TimetableEntry | null;
+  readonly courseId: CourseId;
+  readonly courses: Course[];
+  readonly subjects: Subject[];
+  readonly faculty: Faculty[];
+  readonly prefillDay: Day | null;
+  readonly prefillTime: TimeSlot | null;
+  readonly onSave: (entry: TimetableEntry) => void;
+  readonly onClose: () => void;
 }
 
 const BATCH_OPTIONS: BatchLabel[] = ['A', 'B', 'C', 'All'];
@@ -29,7 +40,7 @@ export default function EntryModal({ entry, courseId, courses, subjects, faculty
     facultyIds: string[];
     day: Day;
     startTime: TimeSlot;
-    duration: 1 | 2 | 3;
+    duration: Duration;
     type: 'theory' | 'practical';
     batch: BatchLabel;
     notes: string;
@@ -48,12 +59,15 @@ export default function EntryModal({ entry, courseId, courses, subjects, faculty
 
   const courseSubjects = subjects.filter(s => s.courseId === form.courseId);
 
-  useEffect(() => {
-    const sub = subjects.find(s => s.code === form.subjectCode && s.courseId === form.courseId);
-    if (sub) {
-      setForm(f => ({ ...f, subjectName: sub.name, type: sub.type, duration: sub.duration as 1 | 2 | 3 }));
-    }
-  }, [form.subjectCode, form.courseId, subjects]);
+  const handleSubjectChange = (code: string) => {
+    const sub = subjects.find(s => s.code === code && s.courseId === form.courseId);
+    setForm(f => ({
+      ...f,
+      subjectCode: code,
+      subjectName: sub?.name ?? '',
+      ...(sub ? { type: sub.type, duration: sub.duration as Duration } : {}),
+    }));
+  };
 
   const toggleFaculty = (id: string) => {
     setForm(f => ({
@@ -115,7 +129,7 @@ export default function EntryModal({ entry, courseId, courses, subjects, faculty
               <select
                 className="mt-1 block w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 value={form.subjectCode}
-                onChange={e => setForm(f => ({ ...f, subjectCode: e.target.value }))}
+                onChange={e => handleSubjectChange(e.target.value)}
                 required
               >
                 <option value="">— Select subject —</option>
@@ -169,7 +183,7 @@ export default function EntryModal({ entry, courseId, courses, subjects, faculty
                 value={form.startTime}
                 onChange={e => setForm(f => ({ ...f, startTime: e.target.value as TimeSlot }))}
               >
-                {TIME_SLOTS.map(s => <option key={s} value={s}>{TIME_LABELS[s]}</option>)}
+                {TIME_SLOTS.map(s => <option key={s} value={s}>{slotLabel(s, form.duration)}</option>)}
               </select>
             </label>
             <label className="block">
@@ -177,7 +191,7 @@ export default function EntryModal({ entry, courseId, courses, subjects, faculty
               <select
                 className="mt-1 block w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
                 value={form.duration}
-                onChange={e => setForm(f => ({ ...f, duration: Number(e.target.value) as 1 | 2 | 3 }))}
+                onChange={e => setForm(f => ({ ...f, duration: Number(e.target.value) as Duration }))}
               >
                 <option value={1}>1 hour</option>
                 <option value={2}>2 hours</option>

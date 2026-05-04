@@ -1,16 +1,34 @@
 import { useState, useMemo } from 'react';
-import type { AppState, AppAction, ConflictInfo, CourseId } from '../types';
-import { DAYS, TIME_SLOTS, TIME_LABELS } from '../types';
+import type { AppState, AppAction, ConflictInfo, TimetableEntry, Day, TimeSlot } from '../types';
+import { DAYS, TIME_SLOTS, TIME_LABELS, SLOT_TO_HOUR } from '../types';
 import { getConflictEntryIds } from '../utils/conflicts';
 import EntryModal from './EntryModal';
-import type { TimetableEntry, Day, TimeSlot } from '../types';
 import { AlertTriangle, Plus, Trash2, Pencil, ChevronLeft, ChevronRight, Printer } from 'lucide-react';
 
 interface Props {
-  state: AppState;
-  dispatch: React.Dispatch<AppAction>;
-  conflicts: ConflictInfo[];
-  facultyMap: Map<string, string>;
+  readonly state: AppState;
+  readonly dispatch: React.Dispatch<AppAction>;
+  readonly conflicts: ConflictInfo[];
+  readonly facultyMap: Map<string, string>;
+}
+
+// How many visible TIME_SLOTS rows does an entry span (handles lunch gap)
+function visualRowspan(startSlot: TimeSlot, duration: number): number {
+  const startH = SLOT_TO_HOUR[startSlot];
+  const endH = startH + duration;
+  return Math.max(1, TIME_SLOTS.filter(s => {
+    const h = SLOT_TO_HOUR[s];
+    return h >= startH && h < endH;
+  }).length);
+}
+
+function hourFmt(h: number): string {
+  return h <= 12 ? `${h}:00` : `${h - 12}:00`;
+}
+
+function entryTimeLabel(slot: TimeSlot, duration: number): string {
+  const start = SLOT_TO_HOUR[slot];
+  return `${hourFmt(start)}–${hourFmt(start + duration)}`;
 }
 
 export default function TimetableView({ state, dispatch, conflicts, facultyMap }: Props) {
@@ -42,9 +60,24 @@ export default function TimetableView({ state, dispatch, conflicts, facultyMap }
     return g;
   }, [courseEntries]);
 
+  // Cells "covered" by a multi-row entry — uses the same visualRowspan so they're consistent
+  const coveredCells = useMemo(() => {
+    const covered = new Set<string>();
+    for (const entry of courseEntries) {
+      const span = visualRowspan(entry.startTime, entry.duration);
+      if (span <= 1) continue;
+      const startIdx = TIME_SLOTS.indexOf(entry.startTime);
+      for (let i = 1; i < span; i++) {
+        const slot = TIME_SLOTS[startIdx + i];
+        if (slot) covered.add(`${entry.day}|${slot}`);
+      }
+    }
+    return covered;
+  }, [courseEntries]);
+
   const navigate = (dir: 1 | -1) => {
     const nextIdx = (courseIdx + dir + state.courses.length) % state.courses.length;
-    dispatch({ type: 'SET_SELECTED_COURSE', payload: state.courses[nextIdx].id as CourseId });
+    dispatch({ type: 'SET_SELECTED_COURSE', payload: state.courses[nextIdx].id });
   };
 
   const openAdd = (day: Day, slot: TimeSlot) => {
@@ -79,6 +112,39 @@ export default function TimetableView({ state, dispatch, conflicts, facultyMap }
   const courseConflicts = conflicts.filter(c =>
     c.affectedEntryIds.some(id => courseEntries.find(e => e.id === id))
   );
+
+  const renderDayCell = (day: Day, slot: TimeSlot) => {
+    if (coveredCells.has(`${day}|${slot}`)) {
+      return null;
+    }
+    const entries = grid[day][slot];
+    const span = entries.length > 0
+      ? Math.max(...entries.map(e => visualRowspan(e.startTime, e.duration)))
+      : 1;
+    return (
+      <GridCell
+        key={day}
+        entries={entries}
+        rowSpan={span}
+        conflictIds={conflictIds}
+        facultyMap={facultyMap}
+        onAdd={() => openAdd(day, slot)}
+        onEdit={openEdit}
+        onDelete={handleDelete}
+        courseBgClass={course.bgClass}
+      />
+    );
+  };
+
+  const renderSlots = (slots: TimeSlot[]) =>
+    slots.map(slot => (
+      <tr key={slot} className="h-20">
+        <td className="border border-gray-200 bg-gray-50 px-3 py-1 text-xs text-gray-500 whitespace-nowrap">
+          {TIME_LABELS[slot]}
+        </td>
+        {DAYS.map(day => renderDayCell(day, slot))}
+      </tr>
+    ));
 
   return (
     <div className="flex flex-col h-full">
@@ -151,27 +217,7 @@ export default function TimetableView({ state, dispatch, conflicts, facultyMap }
               </tr>
             </thead>
             <tbody>
-              {/* Morning slots */}
-              {TIME_SLOTS.slice(0, 3).map(slot => (
-                <tr key={slot}>
-                  <td className="border border-gray-200 bg-gray-50 px-3 py-1 text-xs text-gray-500 whitespace-nowrap">
-                    {TIME_LABELS[slot]}
-                  </td>
-                  {DAYS.map(day => (
-                    <GridCell
-                      key={day}
-                      entries={grid[day][slot]}
-                      conflictIds={conflictIds}
-                      facultyMap={facultyMap}
-                      onAdd={() => openAdd(day as Day, slot as TimeSlot)}
-                      onEdit={openEdit}
-                      onDelete={handleDelete}
-                      courseColorClass={course.colorClass}
-                      courseBgClass={course.bgClass}
-                    />
-                  ))}
-                </tr>
-              ))}
+              {renderSlots(TIME_SLOTS.slice(0, 3))}
 
               {/* Lunch */}
               <tr>
@@ -183,27 +229,7 @@ export default function TimetableView({ state, dispatch, conflicts, facultyMap }
                 </td>
               </tr>
 
-              {/* Afternoon slots */}
-              {TIME_SLOTS.slice(3).map(slot => (
-                <tr key={slot}>
-                  <td className="border border-gray-200 bg-gray-50 px-3 py-1 text-xs text-gray-500 whitespace-nowrap">
-                    {TIME_LABELS[slot]}
-                  </td>
-                  {DAYS.map(day => (
-                    <GridCell
-                      key={day}
-                      entries={grid[day][slot]}
-                      conflictIds={conflictIds}
-                      facultyMap={facultyMap}
-                      onAdd={() => openAdd(day as Day, slot as TimeSlot)}
-                      onEdit={openEdit}
-                      onDelete={handleDelete}
-                      courseColorClass={course.colorClass}
-                      courseBgClass={course.bgClass}
-                    />
-                  ))}
-                </tr>
-              ))}
+              {renderSlots(TIME_SLOTS.slice(3))}
             </tbody>
           </table>
         </div>
@@ -237,63 +263,70 @@ export default function TimetableView({ state, dispatch, conflicts, facultyMap }
 
 function GridCell({
   entries,
+  rowSpan,
   conflictIds,
   facultyMap,
   onAdd,
   onEdit,
   onDelete,
-  courseColorClass,
   courseBgClass,
 }: {
-  entries: TimetableEntry[];
-  conflictIds: Set<string>;
-  facultyMap: Map<string, string>;
-  onAdd: () => void;
-  onEdit: (e: TimetableEntry) => void;
-  onDelete: (id: string) => void;
-  courseColorClass: string;
-  courseBgClass: string;
+  readonly entries: TimetableEntry[];
+  readonly rowSpan: number;
+  readonly conflictIds: Set<string>;
+  readonly facultyMap: Map<string, string>;
+  readonly onAdd: () => void;
+  readonly onEdit: (e: TimetableEntry) => void;
+  readonly onDelete: (id: string) => void;
+  readonly courseBgClass: string;
 }) {
   return (
-    <td className="border border-gray-200 p-1 align-top min-w-[120px] h-20">
-      <div className="space-y-1 h-full">
-        {entries.map(entry => {
-          const isConflict = conflictIds.has(entry.id);
-          const isPractical = entry.type === 'practical';
-          const bg = isConflict
-            ? 'bg-red-100 border-red-400'
-            : isPractical
-            ? 'bg-green-100 border-green-400'
-            : `${courseBgClass} border-blue-300`;
-          return (
-            <div
-              key={entry.id}
-              className={`group relative rounded p-1.5 border text-xs ${bg} cursor-pointer hover:shadow-sm transition-shadow`}
-              onClick={() => onEdit(entry)}
-            >
-              <div className="font-semibold text-gray-800 truncate">{entry.subjectCode}</div>
-              {entry.batch && entry.batch !== 'All' && (
-                <div className="text-gray-500">Batch {entry.batch}</div>
-              )}
-              <div className="text-gray-500 truncate">
-                {entry.facultyIds.map(id => facultyMap.get(id) ?? id).join(', ').slice(0, 30)}
+    <td
+      rowSpan={rowSpan}
+      className="border border-gray-200 p-1 align-top min-w-[120px]"
+      style={{ height: `${rowSpan * 5}rem` }}
+    >
+      <div className="flex flex-col h-full">
+        <div className="space-y-1 flex-1">
+          {entries.map(entry => {
+            const isConflict = conflictIds.has(entry.id);
+            const isPractical = entry.type === 'practical';
+            let bg: string;
+            if (isConflict) bg = 'bg-red-100 border-red-400';
+            else if (isPractical) bg = 'bg-green-100 border-green-400';
+            else bg = `${courseBgClass} border-blue-300`;
+            return (
+              <div key={entry.id} className={`group relative rounded border text-xs ${bg} hover:shadow-sm transition-shadow h-full`}>
+                <button
+                  className="w-full text-left p-1.5 block h-full"
+                  onClick={() => onEdit(entry)}
+                >
+                  <div className="font-semibold text-gray-800 truncate">{entry.subjectCode}</div>
+                  <div className="text-gray-400">{entryTimeLabel(entry.startTime, entry.duration)}</div>
+                  {entry.batch && entry.batch !== 'All' && (
+                    <div className="text-gray-500">Batch {entry.batch}</div>
+                  )}
+                  <div className="text-gray-500 truncate">
+                    {entry.facultyIds.map(id => facultyMap.get(id) ?? id).join(', ').slice(0, 30)}
+                  </div>
+                  {isConflict && <AlertTriangle size={10} className="text-red-600 mt-0.5" />}
+                </button>
+                <button
+                  onClick={() => onDelete(entry.id)}
+                  className="absolute top-0.5 right-0.5 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity"
+                >
+                  <Trash2 size={10} />
+                </button>
+                <button
+                  onClick={() => onEdit(entry)}
+                  className="absolute top-0.5 right-4 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-blue-500 transition-opacity"
+                >
+                  <Pencil size={10} />
+                </button>
               </div>
-              {isConflict && <AlertTriangle size={10} className="text-red-600 mt-0.5" />}
-              <button
-                onClick={e => { e.stopPropagation(); onDelete(entry.id); }}
-                className="absolute top-0.5 right-0.5 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity"
-              >
-                <Trash2 size={10} />
-              </button>
-              <button
-                onClick={e => { e.stopPropagation(); onEdit(entry); }}
-                className="absolute top-0.5 right-4 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-blue-500 transition-opacity"
-              >
-                <Pencil size={10} />
-              </button>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
         <button
           onClick={onAdd}
           className="w-full flex items-center justify-center text-gray-300 hover:text-blue-400 hover:bg-blue-50 rounded transition-colors py-1"
