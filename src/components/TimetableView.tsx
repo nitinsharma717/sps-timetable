@@ -286,19 +286,20 @@ function GridCell({
       className="border border-gray-200 p-1 align-top min-w-[120px]"
       style={{ height: `${rowSpan * 5}rem` }}
     >
-      <div className="flex flex-col h-full">
-        <div className="space-y-1 flex-1">
+      <div className="flex flex-col" style={{ height: `calc(${rowSpan * 5}rem - 0.5rem)` }}>
+        <div className="flex flex-col flex-1 gap-1 min-h-0">
           {entries.map(entry => {
             const isConflict = conflictIds.has(entry.id);
             const isPractical = entry.type === 'practical';
+            const entrySpan = visualRowspan(entry.startTime, entry.duration);
             let bg: string;
             if (isConflict) bg = 'bg-red-100 border-red-400';
             else if (isPractical) bg = 'bg-green-100 border-green-400';
             else bg = `${courseBgClass} border-blue-300`;
             return (
-              <div key={entry.id} className={`group relative rounded border text-xs ${bg} hover:shadow-sm transition-shadow h-full`}>
+              <div key={entry.id} className={`group relative rounded border text-xs ${bg} hover:shadow-sm transition-shadow flex-1`} style={{ minHeight: `calc(${entrySpan * 5}rem - 2.5rem)` }}>
                 <button
-                  className="w-full text-left p-1.5 block h-full"
+                  className="w-full text-left p-1.5 block"
                   onClick={() => onEdit(entry)}
                 >
                   <div className="font-semibold text-gray-800 truncate">{entry.subjectCode}</div>
